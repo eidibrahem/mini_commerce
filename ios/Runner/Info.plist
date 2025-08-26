@@ -8,6 +8,20 @@
 	<string>Mini Commerce</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<string>880416902360-iphmn3ogbgoudbtbtapef1ljskpf8tep.apps.googleusercontent.com</string>
+	<!-- Google Sign In -->
+	<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeRole</key>
+    <string>Editor</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.googleusercontent.apps.880416902360-iphmn3ogbgoudbtbtapef1ljskpf8tep</string>
+    </array>
+  </dict>
+</array>
+
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
