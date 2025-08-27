@@ -24,14 +24,20 @@ class CartProvider extends ChangeNotifier {
   List<CartItemEntity> _cartItems = [];
   bool _isLoading = false;
   String? _errorMessage;
+  String? _userId;
 
   List<CartItemEntity> get cartItems => _cartItems;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   int get itemCount => _cartItems.length;
+  String? get userId => _userId;
 
   double get totalAmount {
     return _cartItems.fold(0.0, (total, item) => total + item.totalPrice);
+  }
+
+  void setUserId(String userId) {
+    _userId = userId;
   }
 
   void _setLoading(bool loading) {
@@ -50,23 +56,35 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> loadCart() async {
+    if (_userId == null) {
+      _setError('User ID not set');
+      print('❌ CartProvider: Cannot load cart - User ID not set');
+      return;
+    }
+
+    print('🔄 CartProvider: Loading cart for user: $_userId');
     _setLoading(true);
     _setError(null);
 
     try {
-      final result = await getCart(NoParams());
+      final result = await getCart(GetCartParams(userId: _userId!));
 
       result.when(
         success: (items) {
+          print(
+            '✅ CartProvider: Cart loaded successfully - ${items.length} items',
+          );
           _setCartItems(items);
           _setError(null);
         },
         failure: (failure) {
+          print('❌ CartProvider: Failed to load cart - ${failure.message}');
           _setError('Failed to load cart');
           _setCartItems([]);
         },
       );
     } catch (e) {
+      print('❌ CartProvider: Unexpected error loading cart - $e');
       _setError('An unexpected error occurred');
       _setCartItems([]);
     } finally {
@@ -75,37 +93,60 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> addItemToCart(String productId, int quantity) async {
+    if (_userId == null) {
+      _setError('User ID not set');
+      print('❌ CartProvider: User ID not set');
+      return;
+    }
+
+    print(
+      '🛒 CartProvider: Adding item to cart - ProductID: $productId, Quantity: $quantity, UserID: $_userId',
+    );
     _setLoading(true);
     _setError(null);
 
     try {
       final result = await addToCart(
-        AddToCartParams(productId: productId, quantity: quantity),
+        AddToCartParams(
+          userId: _userId!,
+          productId: productId,
+          quantity: quantity,
+        ),
       );
 
       result.when(
         success: (item) {
+          print(
+            '✅ CartProvider: Item added successfully - ${item.product.name}',
+          );
           // Reload cart to get updated state
           loadCart();
         },
         failure: (failure) {
-          _setError('Failed to add item to cart');
+          print('❌ CartProvider: Failed to add item - ${failure.message}');
+          _setError('Failed to add item to cart: ${failure.message}');
         },
       );
     } catch (e) {
-      _setError('An unexpected error occurred');
+      print('❌ CartProvider: Unexpected error - $e');
+      _setError('An unexpected error occurred: $e');
     } finally {
       _setLoading(false);
     }
   }
 
   Future<void> removeItemFromCart(String cartItemId) async {
+    if (_userId == null) {
+      _setError('User ID not set');
+      return;
+    }
+
     _setLoading(true);
     _setError(null);
 
     try {
       final result = await removeFromCart(
-        RemoveFromCartParams(cartItemId: cartItemId),
+        RemoveFromCartParams(userId: _userId!, cartItemId: cartItemId),
       );
 
       result.when(
@@ -125,6 +166,11 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> updateItemQuantity(String cartItemId, int quantity) async {
+    if (_userId == null) {
+      _setError('User ID not set');
+      return;
+    }
+
     if (quantity <= 0) {
       await removeItemFromCart(cartItemId);
       return;
@@ -135,7 +181,11 @@ class CartProvider extends ChangeNotifier {
 
     try {
       final result = await updateCartItem(
-        UpdateCartItemParams(cartItemId: cartItemId, quantity: quantity),
+        UpdateCartItemParams(
+          userId: _userId!,
+          cartItemId: cartItemId,
+          quantity: quantity,
+        ),
       );
 
       result.when(
@@ -149,6 +199,33 @@ class CartProvider extends ChangeNotifier {
       );
     } catch (e) {
       _setError('An unexpected error occurred');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> clearCart() async {
+    if (_userId == null) {
+      _setError('User ID not set');
+      return;
+    }
+
+    _setLoading(true);
+    _setError(null);
+
+    try {
+      // For now, we'll remove items one by one since we don't have a clear cart use case
+      // In a real app, you'd want to add a ClearCart use case
+      for (final item in _cartItems) {
+        await removeFromCart(
+          RemoveFromCartParams(userId: _userId!, cartItemId: item.id),
+        );
+      }
+
+      _setCartItems([]);
+      _setError(null);
+    } catch (e) {
+      _setError('Failed to clear cart');
     } finally {
       _setLoading(false);
     }
@@ -170,11 +247,17 @@ class CartProvider extends ChangeNotifier {
             id: '',
             product: ProductEntity(
               id: '',
+              category: '',
               name: '',
+              reviewCount: 0,
+              isAvailable: false,
+              stockQuantity: 0,
+              tags: [],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
               description: '',
               price: 0.0,
               imageUrl: '',
-
               rating: 0.0,
             ),
             quantity: 0,

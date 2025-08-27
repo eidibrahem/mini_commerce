@@ -11,9 +11,9 @@ class CartRepoImpl implements CartRepo {
   const CartRepoImpl({required this.remoteDataSource});
 
   @override
-  Future<Result<List<CartItemEntity>>> getCart() async {
+  Future<Result<List<CartItemEntity>>> getCart(String userId) async {
     try {
-      final result = await remoteDataSource.getCart();
+      final result = await remoteDataSource.getCart(userId);
       return result.map(
         (cartItemModels) =>
             cartItemModels.map((model) => model as CartItemEntity).toList(),
@@ -25,11 +25,16 @@ class CartRepoImpl implements CartRepo {
 
   @override
   Future<Result<CartItemEntity>> addToCart(
+    String userId,
     String productId,
     int quantity,
   ) async {
     try {
-      final result = await remoteDataSource.addToCart(productId, quantity);
+      final result = await remoteDataSource.addToCart(
+        userId,
+        productId,
+        quantity,
+      );
       return result.map((cartItemModel) => cartItemModel as CartItemEntity);
     } catch (e) {
       return FailureResult(failures.UnknownFailure('Failed to add to cart'));
@@ -37,9 +42,9 @@ class CartRepoImpl implements CartRepo {
   }
 
   @override
-  Future<Result<void>> removeFromCart(String cartItemId) async {
+  Future<Result<void>> removeFromCart(String userId, String cartItemId) async {
     try {
-      return await remoteDataSource.removeFromCart(cartItemId);
+      return await remoteDataSource.removeFromCart(userId, cartItemId);
     } catch (e) {
       return FailureResult(
         failures.UnknownFailure('Failed to remove from cart'),
@@ -48,9 +53,17 @@ class CartRepoImpl implements CartRepo {
   }
 
   @override
-  Future<Result<void>> updateCartItem(String cartItemId, int quantity) async {
+  Future<Result<void>> updateCartItem(
+    String userId,
+    String cartItemId,
+    int quantity,
+  ) async {
     try {
-      return await remoteDataSource.updateCartItem(cartItemId, quantity);
+      return await remoteDataSource.updateCartItem(
+        userId,
+        cartItemId,
+        quantity,
+      );
     } catch (e) {
       return FailureResult(
         failures.UnknownFailure('Failed to update cart item'),
@@ -59,27 +72,27 @@ class CartRepoImpl implements CartRepo {
   }
 
   @override
-  Future<Result<void>> clearCart() async {
+  Future<Result<void>> clearCart(String userId) async {
     try {
-      return await remoteDataSource.clearCart();
+      return await remoteDataSource.clearCart(userId);
     } catch (e) {
       return FailureResult(failures.UnknownFailure('Failed to clear cart'));
     }
   }
 
   @override
-  Future<Result<double>> getCartTotal() async {
+  Future<Result<double>> getCartTotal(String userId) async {
     try {
-      return await remoteDataSource.getCartTotal();
+      return await remoteDataSource.getCartTotal(userId);
     } catch (e) {
       return FailureResult(failures.UnknownFailure('Failed to get cart total'));
     }
   }
 
   @override
-  Future<Result<int>> getCartItemCount() async {
+  Future<Result<int>> getCartItemCount(String userId) async {
     try {
-      return await remoteDataSource.getCartItemCount();
+      return await remoteDataSource.getCartItemCount(userId);
     } catch (e) {
       return FailureResult(
         failures.UnknownFailure('Failed to get cart item count'),
