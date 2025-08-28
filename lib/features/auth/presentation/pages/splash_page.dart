@@ -119,7 +119,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                     Icon(Icons.shopping_cart, size: 100, color: Colors.white),
                     const SizedBox(height: AppConstants.paddingLarge),
                     Text(
-                      'Mini Commerce',
+                      'Mini E-Commerce',
                       style: AppConstants.headingStyle.copyWith(
                         color: Colors.white,
                         fontSize: 32,

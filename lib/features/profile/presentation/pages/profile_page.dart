@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,6 +13,8 @@ import '../../../../app/router.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../providers/profile_provider.dart';
+
+enum ImageSelectionOption { camera, gallery, galleryNoCrop }
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -38,6 +42,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? _userData;
   String? _userId;
   bool _isLoading = false;
+  double _uploadProgress = 0.0;
 
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
@@ -188,47 +193,513 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  /// Shows a dialog to select image source (camera or gallery)
+  Future<ImageSelectionOption?> _showImageSourceDialog() async {
+    return await showDialog<ImageSelectionOption>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Image Source'),
+          content: const Text('Choose where to get your profile picture from'),
+          actions: [
+            TextButton.icon(
+              onPressed:
+                  () => Navigator.of(context).pop(ImageSelectionOption.camera),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Camera'),
+            ),
+            TextButton.icon(
+              onPressed:
+                  () => Navigator.of(context).pop(ImageSelectionOption.gallery),
+              icon: const Icon(Icons.photo_library),
+              label: const Text('Gallery'),
+            ),
+            TextButton.icon(
+              onPressed:
+                  () => Navigator.of(
+                    context,
+                  ).pop(ImageSelectionOption.galleryNoCrop),
+              icon: const Icon(Icons.skip_next),
+              label: const Text('Gallery (No Crop)'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Shows a preview of the cropped image before uploading
+  Future<bool> _showImagePreviewDialog(File croppedImage) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Preview Profile Picture'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('This is how your profile picture will look:'),
+                  const SizedBox(height: AppConstants.paddingMedium),
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppConstants.primaryColor,
+                        width: 3,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: Image.file(
+                        croppedImage,
+                        fit: BoxFit.cover,
+                        width: 120,
+                        height: 120,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.paddingMedium),
+                  const Text(
+                    'Do you want to proceed with this image?',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Crop Again'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Use This Image'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  /// Shows a dialog when cropping fails, asking user if they want to use original image
+  Future<bool> _showCropErrorDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Cropping Failed'),
+              content: const Text(
+                'Image cropping failed. Would you like to use the original image instead?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Use Original'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
   Future<void> _pickAndUpdateImage() async {
     try {
-      final XFile? pickedImage = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 80,
-      );
+      // Show source selection dialog
+      final ImageSelectionOption? option = await _showImageSourceDialog();
+      if (option == null) return;
+
+      // Determine the actual image source
+      final ImageSource source =
+          option == ImageSelectionOption.camera
+              ? ImageSource.camera
+              : ImageSource.gallery;
+
+      // Determine if we should skip cropping
+      final bool skipCropping = option == ImageSelectionOption.galleryNoCrop;
+
+      XFile? pickedImage;
+      try {
+        pickedImage = await _imagePicker.pickImage(
+          source: source,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 80,
+        );
+      } catch (pickerError) {
+        print('❌ Image picker error: $pickerError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick image: $pickerError'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
 
       if (pickedImage != null) {
+        print('📸 Image selected: ${pickedImage.path}');
+        print('📸 Image name: ${pickedImage.name}');
+        print('📸 Image size: ${await File(pickedImage.path).length()} bytes');
+
+        // Check if the image format is supported
+        final imageFile = File(pickedImage.path);
+        if (!await imageFile.exists()) {
+          print('❌ Selected image file does not exist');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Selected image file is not accessible'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          return;
+        }
+
+        // Check image format
+        final String imagePath = pickedImage.path.toLowerCase();
+        if (!imagePath.endsWith('.jpg') &&
+            !imagePath.endsWith('.jpeg') &&
+            !imagePath.endsWith('.png') &&
+            !imagePath.endsWith('.webp')) {
+          print('⚠️ Unsupported image format: ${pickedImage.name}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Unsupported image format: ${pickedImage.name}\nPlease select JPG, PNG, or WebP.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+          return;
+        }
+
+        // Validate image can be read
+        try {
+          final imageBytes = await imageFile.readAsBytes();
+          if (imageBytes.isEmpty) {
+            throw Exception('Image file is empty');
+          }
+          print('✅ Image validation passed: ${imageBytes.length} bytes');
+        } catch (validationError) {
+          print('❌ Image validation failed: $validationError');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Selected image is corrupted or cannot be read.\nPlease try another image.',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return;
+        }
+
         setState(() {
           _isLoading = true;
         });
 
-        // For now, we'll just update the local data
-        // In a real app, you'd upload to Firebase Storage
-        _userData!['photoUrl'] = pickedImage.path;
+        try {
+          // Crop the selected image (unless skipping cropping)
+          print('🔄 Starting image processing for: ${pickedImage.path}');
+          File? croppedImage;
 
-        // Update the UI
-        setState(() {});
+          if (skipCropping) {
+            // Skip cropping and use original image
+            croppedImage = File(pickedImage.path);
+            print('⏭️ Skipping cropping, using original image');
+          } else {
+            // Perform cropping
+            try {
+              croppedImage = await _cropImage(pickedImage.path);
+            } catch (cropError) {
+              print('❌ Image cropping failed: $cropError');
+              // Show dialog to ask user if they want to use original image
+              if (mounted) {
+                final useOriginal = await _showCropErrorDialog();
+                if (useOriginal) {
+                  // Use original image without cropping
+                  croppedImage = File(pickedImage.path);
+                  print('✅ Using original image without cropping');
+                } else {
+                  setState(() {
+                    _isLoading = false;
+                  });
+                  return;
+                }
+              }
+            }
+          }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile image updated successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
+          if (croppedImage == null) {
+            // User cancelled cropping
+            setState(() {
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Image cropping was cancelled'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+
+          print('✅ Image processed successfully: ${croppedImage.path}');
+
+          // Store the old photo URL to delete it later
+          final oldPhotoUrl = _userData?['photoUrl'];
+
+          // Show preview of cropped image
+          if (mounted) {
+            final shouldProceed = await _showImagePreviewDialog(croppedImage);
+            if (!shouldProceed) {
+              setState(() {
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+
+          // Validate cropped image file
+          if (!await croppedImage.exists()) {
+            throw Exception('Cropped image file does not exist');
+          }
+
+          // Check file size (max 5MB)
+          final fileSize = await croppedImage.length();
+          if (fileSize > 5 * 1024 * 1024) {
+            throw Exception('Image file is too large. Maximum size is 5MB.');
+          }
+
+          // Upload image to Firebase Storage with unique filename
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final fileName = 'profile_${_userId}_$timestamp.jpg';
+          final storageRef = firebase_storage.FirebaseStorage.instance
+              .ref()
+              .child('users/profile_images/$fileName');
+
+          // Upload the cropped file with progress tracking
+          final uploadTask = storageRef.putFile(croppedImage);
+
+          // Listen to upload progress
+          uploadTask.snapshotEvents.listen((snapshot) {
+            setState(() {
+              _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes;
+            });
+          });
+
+          // Wait for upload to complete
+          final snapshot = await uploadTask;
+
+          // Get the download URL
+          final downloadURL = await snapshot.ref.getDownloadURL();
+
+          // Update local data with the download URL
+          _userData!['photoUrl'] = downloadURL;
+
+          // Reset upload progress
+          _uploadProgress = 0.0;
+
+          // Clean up temporary cropped file
+          try {
+            if (await croppedImage.exists()) {
+              await croppedImage.delete();
+              print('✅ Temporary cropped image cleaned up');
+            }
+          } catch (cleanupError) {
+            print(
+              '⚠️ Warning: Could not clean up temporary file: $cleanupError',
+            );
+          }
+
+          // Update the UI
+          setState(() {});
+
+          // Delete the old profile image if it exists and is from Firebase Storage
+          if (oldPhotoUrl != null &&
+              oldPhotoUrl.isNotEmpty &&
+              oldPhotoUrl.startsWith('http') &&
+              oldPhotoUrl.contains('firebasestorage.googleapis.com')) {
+            try {
+              await _deleteOldProfileImage(oldPhotoUrl);
+              print('✅ Old profile image deleted successfully');
+            } catch (deleteError) {
+              print(
+                '⚠️ Warning: Could not delete old profile image: $deleteError',
+              );
+              // Continue even if deletion fails
+            }
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile image uploaded successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          print('✅ Profile image uploaded to Firebase Storage: $downloadURL');
+        } catch (uploadError) {
+          print('❌ Error uploading image to Firebase Storage: $uploadError');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error uploading image: $uploadError'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       print('❌ Error picking image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error updating profile image: $e'),
+          content: Text('Error picking image: $e'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       setState(() {
         _isLoading = false;
+        _uploadProgress = 0.0;
       });
+    }
+  }
+
+  /// Resizes an image if it's too large
+  Future<File?> _resizeImageIfNeeded(File imageFile) async {
+    try {
+      final int fileSize = await imageFile.length();
+      final int maxSize = 5 * 1024 * 1024; // 5MB
+
+      if (fileSize <= maxSize) {
+        return imageFile; // No need to resize
+      }
+
+      print('🔄 Image is too large ($fileSize bytes), resizing...');
+
+      // For now, just return the original file
+      // In a production app, you might want to add actual image resizing
+      // using packages like image or flutter_image_compress
+      print('⚠️ Image resizing not implemented, using original file');
+      return imageFile;
+    } catch (e) {
+      print('❌ Error resizing image: $e');
+      return imageFile; // Return original on error
+    }
+  }
+
+  /// Crops the selected image to a square aspect ratio
+  Future<File?> _cropImage(String imagePath) async {
+    try {
+      print('🔄 Cropping image: $imagePath');
+
+      // Check if the image file exists
+      final imageFile = File(imagePath);
+      if (!await imageFile.exists()) {
+        print('❌ Image file does not exist: $imagePath');
+        throw Exception('Image file does not exist');
+      }
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: imagePath,
+        aspectRatio: const CropAspectRatio(
+          ratioX: 1,
+          ratioY: 1,
+        ), // Square aspect ratio
+        compressQuality: 80,
+        maxWidth: 512,
+        maxHeight: 512,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Picture',
+            toolbarColor: AppConstants.primaryColor,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            showCropGrid: true,
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Picture',
+            aspectRatioLockEnabled: true,
+            aspectRatioPickerButtonHidden: true,
+            resetAspectRatioEnabled: false,
+            rotateButtonsHidden: true,
+            rotateClockwiseButtonHidden: true,
+            doneButtonTitle: 'Done',
+            cancelButtonTitle: 'Cancel',
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        print('✅ Image cropped successfully');
+        return File(croppedFile.path);
+      } else {
+        print('⚠️ Image cropping cancelled by user');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Error cropping image: $e');
+      return null;
+    }
+  }
+
+  /// Deletes an old profile image from Firebase Storage
+  Future<void> _deleteOldProfileImage(String imageUrl) async {
+    try {
+      // Extract the file path from the Firebase Storage URL
+      final uri = Uri.parse(imageUrl);
+      final pathSegments = uri.pathSegments;
+
+      // Find the storage path (usually after 'o' segment)
+      final oIndex = pathSegments.indexOf('o');
+      if (oIndex != -1 && oIndex + 1 < pathSegments.length) {
+        final storagePath = pathSegments.sublist(oIndex + 1).join('/');
+
+        // Decode the URL-encoded path
+        final decodedPath = Uri.decodeComponent(storagePath);
+
+        // Create a reference to the file and delete it
+        final storageRef = firebase_storage.FirebaseStorage.instance
+            .ref()
+            .child(decodedPath);
+        await storageRef.delete();
+
+        print(
+          '✅ Old profile image deleted from Firebase Storage: $decodedPath',
+        );
+      }
+    } catch (e) {
+      print('❌ Error deleting old profile image: $e');
+      rethrow;
     }
   }
 
@@ -251,6 +722,7 @@ class _ProfilePageState extends State<ProfilePage> {
           'state': _stateController.text.trim(),
           'zipCode': _zipCodeController.text.trim(),
           'country': _countryController.text.trim(),
+          'photoUrl': _userData?['photoUrl'] ?? '', // Include photo URL
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
@@ -596,6 +1068,37 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                               ),
                             ),
+
+                            // Upload progress indicator
+                            if (_isEditing &&
+                                _uploadProgress > 0.0 &&
+                                _uploadProgress < 1.0) ...[
+                              const SizedBox(height: AppConstants.paddingSmall),
+                              Container(
+                                width: 120,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                                child: LinearProgressIndicator(
+                                  value: _uploadProgress,
+                                  backgroundColor: Colors.transparent,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppConstants.primaryColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: AppConstants.paddingSmall),
+                              Text(
+                                'Uploading... ${(_uploadProgress * 100).toInt()}%',
+                                style: AppConstants.captionStyle.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+
                             const SizedBox(height: AppConstants.paddingMedium),
                             if (!_isEditing) ...[
                               Text(

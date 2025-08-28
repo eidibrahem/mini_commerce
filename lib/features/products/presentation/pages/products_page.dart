@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:in_app_review/in_app_review.dart';
 import '../../../../core/constants.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_provider.dart';
@@ -151,6 +152,36 @@ class _ProductsPageState extends State<ProductsPage> {
               ),
             ),
 
+            // In-App Review Button
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppConstants.paddingMedium,
+                vertical: AppConstants.paddingSmall,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showReviewOptions(),
+                  icon: const Icon(Icons.star_rate),
+                  label: Text(
+                    AppStrings.getString(context, 'rateApp') ?? 'Rate App',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppConstants.paddingMedium,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.borderRadiusMedium,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
             // Category Filter
             Consumer<ProductProvider>(
               builder: (context, productProvider, child) {
@@ -286,6 +317,120 @@ class _ProductsPageState extends State<ProductsPage> {
         ),
       ),
     );
+  }
+
+  /// Shows a review options dialog
+  Future<void> _showReviewOptions() async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.star_rate, color: Colors.amber[600]),
+              const SizedBox(width: 8),
+              const Text('Rate Our App'),
+            ],
+          ),
+          content: const Text(
+            'We\'d love to hear your feedback! How would you like to rate our app?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _openEmailFeedback();
+              },
+              child: const Text('Send Feedback'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _requestReview();
+              },
+              child: const Text('Rate in Store'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _requestReview();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber[600],
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Rate Now'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Opens email feedback
+  Future<void> _openEmailFeedback() async {
+    // You can implement email feedback functionality here
+    // For now, just show a message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email feedback feature coming soon!'),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Requests an in-app review
+  Future<void> _requestReview() async {
+    try {
+      final InAppReview inAppReview = InAppReview.instance;
+
+      // Check if the in-app review is available
+      if (await inAppReview.isAvailable()) {
+        // Request the in-app review
+        await inAppReview.requestReview();
+        print('✅ In-app review requested successfully');
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Thank you for your feedback!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // If in-app review is not available, open the store page
+        print('⚠️ In-app review not available, opening store page');
+        await inAppReview.openStoreListing(
+          appStoreId:
+              'your_app_store_id_here', // Replace with your actual App Store ID
+        );
+      }
+    } catch (e) {
+      print('❌ Error requesting review: $e');
+      // Show a snackbar to inform the user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Unable to open review. Please try again later.',
+            ),
+            backgroundColor: AppConstants.errorColor,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildCategoryChip(String label, bool isSelected, VoidCallback onTap) {

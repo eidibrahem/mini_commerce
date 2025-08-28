@@ -271,6 +271,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "qty": MessageLookupByLibrary.simpleMessage("Qty"),
         "quickActions": MessageLookupByLibrary.simpleMessage("Quick Actions"),
         "quickService": MessageLookupByLibrary.simpleMessage("Quick service"),
+        "rateApp": MessageLookupByLibrary.simpleMessage("Rate App"),
         "received": MessageLookupByLibrary.simpleMessage("Received"),
         "receiverName": MessageLookupByLibrary.simpleMessage("Receiver Name"),
         "receiverNumber":

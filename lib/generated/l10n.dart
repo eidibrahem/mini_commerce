@@ -1022,6 +1022,16 @@ class S {
     );
   }
 
+  /// `Rate App`
+  String get rateApp {
+    return Intl.message(
+      'Rate App',
+      name: 'rateApp',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `+20`
   String get plus20 {
     return Intl.message(
