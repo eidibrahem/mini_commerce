@@ -6,6 +6,7 @@ import '../features/products/presentation/pages/product_details_page.dart';
 import '../features/cart/presentation/pages/cart_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/auth/presentation/pages/splash_page.dart';
+import '../features/map/presentation/pages/map_page.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -15,6 +16,7 @@ class AppRouter {
   static const String productDetails = '/product-details';
   static const String cart = '/cart';
   static const String profile = '/profile';
+  static const String map = '/map';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -35,6 +37,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const CartPage());
       case profile:
         return MaterialPageRoute(builder: (_) => const ProfilePage());
+      case map:
+        return MaterialPageRoute(builder: (_) => const MapPage());
       default:
         return MaterialPageRoute(
           builder:

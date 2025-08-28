@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants.dart';
 import '../../../../core/utils/cache_helper.dart';
 import '../providers/cart_provider.dart';
+import 'st_ser.dart';
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -13,6 +14,8 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
+  bool _isProcessingCheckout = false;
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +33,125 @@ class _CartPageState extends State<CartPage> {
         print('❌ CartPage: No userId found - cannot load cart');
       }
     });
+  }
+
+  /// Process checkout with Stripe Payment Sheet
+  Future<void> _processCheckout(
+    BuildContext context,
+    CartProvider cartProvider,
+  ) async {
+    try {
+      setState(() {
+        _isProcessingCheckout = true;
+      });
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (context) => const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppConstants.primaryColor,
+                ),
+              ),
+            ),
+      );
+
+      // Get user ID
+      final userId = await CacheHelper.getData(key: 'uId');
+      if (userId == null) {
+        Navigator.pop(context); // Close loading dialog
+        _showErrorSnackBar('User not authenticated');
+        return;
+      }
+
+      // Log cart data for debugging
+      print('🛒 CartPage: Cart data for checkout:');
+      print('   Total Amount: \$${cartProvider.totalAmount}');
+      print('   Item Count: ${cartProvider.itemCount}');
+      print('   Items:');
+      for (final item in cartProvider.cartItems) {
+        print(
+          '     - ${item.product.name} x${item.quantity} = \$${(item.product.price * item.quantity).toStringAsFixed(2)}',
+        );
+      }
+
+      Navigator.pop(context); // Close loading dialog
+
+      // Use PaymentManager to process payment with Stripe Payment Sheet
+      await PaymentManager.makePayment(
+        cartProvider.totalAmount.round(),
+        "USD", // Using USD instead of EGP for consistency
+      );
+
+      // If we reach here, payment was successful
+      _showSuccessSnackBar(
+        'Payment successful! Order confirmed for \$${cartProvider.totalAmount.toStringAsFixed(2)}',
+      );
+
+      // Clear cart after successful payment
+      await cartProvider.clearCart();
+
+      // Wait a moment for user to see success message, then navigate back
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Navigate back to previous screen
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      _showErrorSnackBar('Payment failed: $e');
+      print('❌ CartPage: Payment error: $e');
+    } finally {
+      setState(() {
+        _isProcessingCheckout = false;
+      });
+    }
+  }
+
+  /// Show success snackbar
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message, style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+        ),
+      ),
+    );
+  }
+
+  /// Show error snackbar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message, style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+        ),
+      ),
+    );
   }
 
   @override
@@ -347,40 +469,65 @@ class _CartPageState extends State<CartPage> {
                       ],
                     ),
                     const SizedBox(height: AppConstants.paddingLarge),
+
+                    // Payment Summary
+                    Container(
+                      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.borderRadiusSmall,
+                        ),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total to Pay:',
+                            style: AppConstants.bodyStyle.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          Text(
+                            '\$${cartProvider.totalAmount.toStringAsFixed(2)}',
+                            style: AppConstants.headingStyle.copyWith(
+                              color: AppConstants.primaryColor,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: AppConstants.paddingMedium),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          // TODO: Implement checkout functionality
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.info_outline,
-                                    color: Colors.white,
+                        onPressed:
+                            (cartProvider.cartItems.isNotEmpty &&
+                                    !_isProcessingCheckout)
+                                ? () => _processCheckout(context, cartProvider)
+                                : null,
+                        icon:
+                            _isProcessingCheckout
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'Checkout functionality coming soon!',
-                                    style: TextStyle(fontSize: 16),
-                                  ),
-                                ],
-                              ),
-                              duration: const Duration(seconds: 3),
-                              backgroundColor: AppConstants.primaryColor,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppConstants.borderRadiusMedium,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.payment_rounded),
-                        label: const Text(
-                          'Proceed to Checkout',
+                                )
+                                : const Icon(Icons.payment_rounded),
+                        label: Text(
+                          _isProcessingCheckout
+                              ? 'Processing...'
+                              : 'Proceed to Checkout',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,

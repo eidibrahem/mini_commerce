@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import '../app/di/injector.dart';
 import '../app/theme.dart';
 import '../app/router.dart';
+import '../core/localization/language_provider.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/products/presentation/providers/product_provider.dart';
 import '../features/cart/presentation/providers/cart_provider.dart';
 import '../features/profile/presentation/providers/profile_provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 class MiniCommerceApp extends StatelessWidget {
   const MiniCommerceApp({super.key});
@@ -27,15 +29,29 @@ class MiniCommerceApp extends StatelessWidget {
         ChangeNotifierProvider<ProfileProvider>(
           create: (_) => getIt<ProfileProvider>(),
         ),
+        ChangeNotifierProvider<LanguageProvider>(
+          create: (_) => LanguageProvider(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'Mini Commerce',
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        initialRoute: AppRouter.splash,
-        onGenerateRoute: AppRouter.generateRoute,
-        debugShowCheckedModeBanner: false,
+      child: Consumer<LanguageProvider>(
+        builder: (context, languageProvider, child) {
+          return MaterialApp(
+            title: 'Mini E-Commerce',
+            locale: languageProvider.currentLocale,
+            localizationsDelegates: [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('en', 'US'), Locale('ar', 'SA')],
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: ThemeMode.system,
+            initialRoute: AppRouter.splash,
+            onGenerateRoute: AppRouter.generateRoute,
+            debugShowCheckedModeBanner: false,
+          );
+        },
       ),
     );
   }

@@ -1,4 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../../../../core/utils/cache_helper.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../domain/entities/user_entity.dart';
@@ -124,6 +127,10 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOutUser() async {
+    await FirebaseAuth.instance.signOut();
+    await GoogleSignIn().signOut();
+    CacheHelper.removeData(key: 'uId');
+
     _setLoading(true);
     _setError(null);
 
@@ -148,5 +155,13 @@ class AuthProvider extends ChangeNotifier {
 
   void clearError() {
     _setError(null);
+  }
+
+  // Method to clear all auth data locally (for logout purposes)
+  void clearAuthData() {
+    _currentUser = null;
+    _errorMessage = null;
+    _isLoading = false;
+    notifyListeners();
   }
 }

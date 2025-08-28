@@ -91,4 +91,12 @@ class ProfileProvider extends ChangeNotifier {
   void clearProfile() {
     _setProfile(null);
   }
+
+  // Method to clear all profile data locally (for logout purposes)
+  void clearProfileData() {
+    _profile = null;
+    _errorMessage = null;
+    _isLoading = false;
+    notifyListeners();
+  }
 }

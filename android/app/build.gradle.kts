@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -11,31 +12,32 @@ plugins {
 android {
     namespace = "com.libas_collectiv.mini_commerce"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "29.0.13113456"
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
 
+    ndkVersion = "29.0.13113456"
+
+    // Java 17 + core library desugaring
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+    }
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.libas_collectiv.mini_commerce"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Ensure minSdk >= 21
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
+
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // TODO: use a real signing config for release
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -43,4 +45,20 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // 🔼 bumped to 2.1.5 to satisfy flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // other dependencies (if any) stay here
+}
+
+
+val lp = Properties().apply {
+    load(rootProject.file("local.properties").inputStream())
+}
+android {
+    defaultConfig {
+        manifestPlaceholders["AIzaSyC-WYusA4tHyCV0HsD8dfVG-spfQMgC05U"] = lp.getProperty("AIzaSyC-WYusA4tHyCV0HsD8dfVG-spfQMgC05U") ?: ""
+    }
 }

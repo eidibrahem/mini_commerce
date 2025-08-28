@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../../../../core/constants.dart';
 import '../../../../core/utils/cache_helper.dart';
+import '../../../../app/router.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../cart/presentation/providers/cart_provider.dart';
 import '../providers/profile_provider.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -82,7 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (_userId != null) {
         // Get current Firebase Auth user for additional data
-        final currentUser = FirebaseAuth.instance.currentUser;
+        final currentUser = firebase_auth.FirebaseAuth.instance.currentUser;
 
         // Load user data from Firestore
         final userDoc =
@@ -280,6 +284,154 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    // Show confirmation dialog if user is editing
+    if (_isEditing) {
+      final shouldLogout = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Discard Changes?'),
+            content: const Text(
+              'You have unsaved changes. Are you sure you want to logout and discard these changes?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Logout'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldLogout != true) {
+        return; // User cancelled logout
+      }
+    }
+
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Get the auth provider
+      final authProvider = context.read<AuthProvider>();
+
+      // Sign out from Firebase Auth
+      await authProvider.signOutUser();
+
+      // Clear ALL cached user data comprehensively
+      await CacheHelper.removeData(key: 'uId');
+      await CacheHelper.removeData(key: 'userData');
+      await CacheHelper.removeData(key: 'userProfile');
+      await CacheHelper.removeData(key: 'userEmail');
+      await CacheHelper.removeData(key: 'userName');
+
+      // Clear all cached data completely (nuclear option)
+      await CacheHelper.clearData();
+
+      // Clear all local files and caches comprehensively
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final cacheDir = await getTemporaryDirectory();
+
+        // Clear app documents directory (user-specific files)
+        if (await appDir.exists()) {
+          final files = appDir.listSync();
+          for (final file in files) {
+            if (file is File &&
+                (file.path.contains('profile') || file.path.contains('user'))) {
+              await file.delete();
+            }
+          }
+        }
+
+        // Clear entire cache directory (nuclear option)
+        if (await cacheDir.exists()) {
+          await cacheDir.delete(recursive: true);
+        }
+
+        // Clear any temporary profile images
+        if (_userData?['photoUrl'] != null &&
+            !_userData!['photoUrl']!.startsWith('http')) {
+          final imageFile = File(_userData!['photoUrl']!);
+          if (await imageFile.exists()) {
+            await imageFile.delete();
+          }
+        }
+      } catch (e) {
+        print('⚠️ Warning: Could not clear some local files: $e');
+        // Continue with logout even if file clearing fails
+      }
+
+      // Clear local user data
+      setState(() {
+        _userData = null;
+        _userId = null;
+      });
+
+      // Force clear Firebase Auth state
+      await firebase_auth.FirebaseAuth.instance.signOut();
+
+      // Clear any potential Firebase Firestore cache
+      try {
+        await FirebaseFirestore.instance.clearPersistence();
+      } catch (e) {
+        print('⚠️ Warning: Could not clear Firestore persistence: $e');
+        // Continue with logout even if Firestore clearing fails
+      }
+
+      // Clear all providers that might hold user data
+      if (mounted) {
+        // Clear cart data
+        context.read<CartProvider>().clearCartData();
+
+        // Clear profile data
+        context.read<ProfileProvider>().clearProfileData();
+
+        // Clear auth provider data locally
+        context.read<AuthProvider>().clearAuthData();
+      }
+
+      // Navigate to login page and remove all previous routes
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRouter.login,
+          (route) => false, // Remove all previous routes
+        );
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logged out successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('❌ Error during logout: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error during logout: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
@@ -644,6 +796,26 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ),
+
+                        const SizedBox(height: AppConstants.paddingMedium),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _logout,
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Logout'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppConstants.paddingMedium,
+                              ),
+                              side: BorderSide(
+                                color: Colors.red[400] ?? Colors.red,
+                              ),
+                              foregroundColor: Colors.red[400] ?? Colors.red,
+                            ),
+                          ),
+                        ),
                       ] else ...[
                         // Save and Cancel buttons when editing
                         Row(
@@ -676,6 +848,27 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
                           ],
+                        ),
+
+                        const SizedBox(height: AppConstants.paddingLarge),
+
+                        // Logout button when editing
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _logout,
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Logout'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppConstants.paddingMedium,
+                              ),
+                              side: BorderSide(
+                                color: Colors.red[400] ?? Colors.red,
+                              ),
+                              foregroundColor: Colors.red[400] ?? Colors.red,
+                            ),
+                          ),
                         ),
                       ],
                     ],

@@ -235,6 +235,14 @@ class CartProvider extends ChangeNotifier {
     _setError(null);
   }
 
+  // Method to clear cart data locally (for logout purposes)
+  void clearCartData() {
+    _cartItems = [];
+    _userId = null;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   bool isInCart(String productId) {
     return _cartItems.any((item) => item.product.id == productId);
   }

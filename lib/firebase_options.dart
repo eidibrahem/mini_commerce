@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '880416902360',
     projectId: 'mini-e-commerce-2dfad',
     storageBucket: 'mini-e-commerce-2dfad.firebasestorage.app',
-    iosBundleId: 'com.example.miniCommerce',
+    iosBundleId: 'com.example. ',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

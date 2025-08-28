@@ -32,7 +32,9 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
-
+# Ignore local secrets files
+lib/core/constants.dart
+lib/core/services/stripe_services.dart
 # Symbolication related
 app.*.symbols
 
