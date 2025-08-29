@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:in_app_review/in_app_review.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import '../../../../core/constants.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../app/router.dart';
 import '../providers/product_provider.dart';
+import '../providers/send_notification_services.dart';
 import '../widgets/product_card.dart';
 
 class ProductsPage extends StatefulWidget {
@@ -122,66 +124,136 @@ class _ProductsPageState extends State<ProductsPage> {
               ),
             ),
 
-            // Map Button
+            // Quick Action Buttons Row
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppConstants.paddingMedium,
                 vertical: AppConstants.paddingSmall,
               ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushNamed(context, AppRouter.map);
-                  },
-                  icon: const Icon(Icons.map),
-                  label: Text(AppStrings.getString(context, 'map')),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppConstants.primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppConstants.paddingMedium,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppConstants.borderRadiusMedium,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Map Button
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, AppRouter.map);
+                        },
+                        icon: const Icon(Icons.map),
+                        iconSize: 32,
+                        tooltip: AppStrings.getString(context, 'map'),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppConstants.primaryColor
+                              .withOpacity(0.1),
+                          foregroundColor: AppConstants.primaryColor,
+                          padding: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadiusMedium,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(
+                        AppStrings.getString(context, 'map'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppConstants.primaryColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                ),
+
+                  // In-App Review Button
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () => _showReviewOptions(),
+                        icon: const Icon(Icons.star_rate),
+                        iconSize: 32,
+                        tooltip:
+                            AppStrings.getString(context, 'rateApp') ??
+                            'Rate App',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.amber[600]?.withOpacity(0.1),
+                          foregroundColor: Colors.amber[600],
+                          padding: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadiusMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        AppStrings.getString(context, 'rateApp') ?? 'Rate App',
+                        style: TextStyle(
+                          fontSize: 12,
+
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+
+                  // Notifications Button
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed:
+                            () => sendNotification(
+                              title: 'Test Notification',
+                              body: 'This is a test notification',
+                              data: {'route': '/product_details', 'id': '123'},
+                            ),
+                        icon: const Icon(Icons.notifications),
+                        iconSize: 32,
+                        tooltip: 'Notifications',
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color.fromARGB(
+                            255,
+                            0,
+                            34,
+                            255,
+                          ).withOpacity(0.1),
+                          foregroundColor: const Color.fromARGB(
+                            255,
+                            0,
+                            34,
+                            255,
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadiusMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Notifications',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-
-            // In-App Review Button
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppConstants.paddingMedium,
-                vertical: AppConstants.paddingSmall,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _showReviewOptions(),
-                  icon: const Icon(Icons.star_rate),
-                  label: Text(
-                    AppStrings.getString(context, 'rateApp') ?? 'Rate App',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppConstants.paddingMedium,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppConstants.borderRadiusMedium,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
             // Category Filter
             Consumer<ProductProvider>(
               builder: (context, productProvider, child) {
@@ -319,52 +391,70 @@ class _ProductsPageState extends State<ProductsPage> {
     );
   }
 
+  /// Shows a star rating prompt dialog
+  Future<void> _showStarPrompt() async {
+    double rating = 0;
+    await showDialog(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setState) => AlertDialog(
+                  title: const Text('How was your experience?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RatingBar.builder(
+                        initialRating: rating,
+                        minRating: 1,
+                        itemCount: 5,
+                        itemSize: 32,
+                        unratedColor: Colors.grey.shade300,
+                        itemBuilder:
+                            (c, _) =>
+                                const Icon(Icons.star, color: Colors.amber),
+                        onRatingUpdate: (r) {
+                          setState(() {
+                            rating = r;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Rating: ${rating.toInt()}/5',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Later'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        if (rating >= 4) {
+                          _requestReview();
+                        } else {
+                          _openEmailFeedback(); // افتح صفحة ملاحظاتك
+                        }
+                      },
+                      child: const Text('Submit'),
+                    ),
+                  ],
+                ),
+          ),
+    );
+  }
+
   /// Shows a review options dialog
   Future<void> _showReviewOptions() async {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.star_rate, color: Colors.amber[600]),
-              const SizedBox(width: 8),
-              const Text('Rate Our App'),
-            ],
-          ),
-          content: const Text(
-            'We\'d love to hear your feedback! How would you like to rate our app?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _openEmailFeedback();
-              },
-              child: const Text('Send Feedback'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _requestReview();
-              },
-              child: const Text('Rate in Store'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _requestReview();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber[600],
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Rate Now'),
-            ),
-          ],
-        );
-      },
-    );
+    // Show the star rating prompt directly
+    await _showStarPrompt();
   }
 
   /// Opens email feedback

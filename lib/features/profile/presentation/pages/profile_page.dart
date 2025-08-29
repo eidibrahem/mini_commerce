@@ -13,6 +13,7 @@ import '../../../../app/router.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../providers/profile_provider.dart';
+import '../../../products/presentation/providers/send_notification_services.dart';
 
 enum ImageSelectionOption { camera, gallery, galleryNoCrop }
 
@@ -136,6 +137,17 @@ class _ProfilePageState extends State<ProfilePage> {
         }
 
         _populateFormFields();
+
+        // Send notification about profile loaded
+        await _sendNotification(
+          title: 'Profile Loaded',
+          body: 'Your profile has been loaded successfully',
+          data: {
+            'type': 'profile_loaded',
+            'action': 'load_success',
+            'userId': _userId ?? '',
+          },
+        );
       }
     } catch (e) {
       print('❌ ProfilePage: Error loading user data: $e');
@@ -183,7 +195,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _toggleEditMode() {
+  void _toggleEditMode() async {
     setState(() {
       if (_isEditing) {
         // Cancel editing - restore original values
@@ -191,6 +203,19 @@ class _ProfilePageState extends State<ProfilePage> {
       }
       _isEditing = !_isEditing;
     });
+
+    // Send notification about edit mode change
+    if (_isEditing) {
+      await _sendNotification(
+        title: 'Edit Mode Enabled',
+        body: 'You can now edit your profile information',
+        data: {
+          'type': 'profile_edit',
+          'action': 'edit_mode_enabled',
+          'userId': _userId ?? '',
+        },
+      );
+    }
   }
 
   /// Shows a dialog to select image source (camera or gallery)
@@ -565,6 +590,17 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           );
 
+          // Send notification about profile image update
+          await _sendNotification(
+            title: 'Profile Picture Updated',
+            body: 'Your profile picture has been updated successfully!',
+            data: {
+              'type': 'profile_image_update',
+              'action': 'image_uploaded',
+              'userId': _userId ?? '',
+            },
+          );
+
           print('✅ Profile image uploaded to Firebase Storage: $downloadURL');
         } catch (uploadError) {
           print('❌ Error uploading image to Firebase Storage: $uploadError');
@@ -703,6 +739,39 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Sends a notification using the send_notification_services
+  Future<void> _sendNotification({
+    required String title,
+    required String body,
+    Map<String, String>? data,
+    String? token,
+  }) async {
+    try {
+      print(
+        '📱 ProfilePage: Sending notification - Title: $title, Body: $body',
+      );
+
+      await sendNotification(
+        token:
+            token ?? 'default_token', // You can pass a specific FCM token here
+        title: title,
+        body: body,
+        data:
+            data ??
+            {
+              'type': 'profile_update',
+              'userId': _userId ?? '',
+              'timestamp': DateTime.now().toIso8601String(),
+            },
+      );
+
+      print('✅ ProfilePage: Notification sent successfully');
+    } catch (e) {
+      print('❌ ProfilePage: Error sending notification: $e');
+      // Don't show error to user for notification failures
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -746,6 +815,17 @@ class _ProfilePageState extends State<ProfilePage> {
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
+        );
+
+        // Send notification about profile update
+        await _sendNotification(
+          title: 'Profile Updated',
+          body: 'Your profile has been updated successfully!',
+          data: {
+            'type': 'profile_update',
+            'action': 'profile_saved',
+            'userId': _userId ?? '',
+          },
         );
       } catch (e) {
         print('❌ Error saving profile: $e');
@@ -886,6 +966,17 @@ class _ProfilePageState extends State<ProfilePage> {
           (route) => false, // Remove all previous routes
         );
       }
+
+      // Send notification about logout
+      await _sendNotification(
+        title: 'Logged Out',
+        body: 'You have been logged out successfully',
+        data: {
+          'type': 'user_logout',
+          'action': 'logout_success',
+          'userId': _userId ?? '',
+        },
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
